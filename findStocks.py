@@ -6,9 +6,6 @@ Criterios:
   - Confirmacion anual: rendimiento a 1 ano > 0
   - Punto de entrada: RSI(14) en zona de pullback sano (35-50), ni sobrecomprado
     ni en caida libre
-  - Universo: top N por capitalizacion de mercado dentro de Francia, Paises
-    Bajos, Belgica y Portugal (Euronext no existe como mercado unico en
-    TradingView, se combinan los paises)
 
 Requisitos:
   pip install tvscreener pandas
@@ -19,6 +16,7 @@ from tvscreener import StockField
 import pandas as pd
 import sys
 
+
 # ---- Parametros ajustables ----
 TOP_N_CAP = 50          # cuantas empresas de mayor capitalizacion evaluar
 RSI_MIN, RSI_MAX = 35, 50  # zona de pullback sano
@@ -26,82 +24,32 @@ MIN_PERFORMANCE_1Y = 0.0   # rendimiento minimo a 1 ano (en %)
 MAX_PRICE = 180   # filtra las que tienen un precio demasiado alto. Para desactivar el filtro poner valor 0.
 MAX_STOCKS = 300  # maximo de stocks que va a coger de los markets (antes de filtrar)
 
-def obtener_candidatos() -> pd.DataFrame:
-    """Descarga el screener de los paises activados con los campos necesarios."""
+
+
+class StocksFinder:
+
     ss = tvs.StockScreener()
-    ## print([m for m in dir(ss) if not m.startswith('_')])
-    ss.set_range(0, MAX_STOCKS)
-    ss.set_markets(
-        tvs.Market.FRANCE,      # EURONEXT
-        tvs.Market.NETHERLANDS, # EURONEXT    
-        tvs.Market.BELGIUM,     # EURONEXT
-        tvs.Market.PORTUGAL,    # EURONEXT   
-        #tvs.Market.SPAIN,
-        #tvs.Market.AMERICA,
-        #tvs.Market.UK,
-        #tvs.Market.JAPAN,
-        #tvs.Market.GERMANY,
-        #tvs.Market.CHINA,
-    )
+    euronext = ["FRANCE", "NETHERLANDS", "BELGIUM", "PORTUGAL"]
+    markets = []
 
-    ss.specific_fields = [
-        StockField.NAME,
-        StockField.ISIN,
-        StockField.PRICE,
-        StockField.MARKET_CAPITALIZATION,
-        StockField.RELATIVE_STRENGTH_INDEX_14,
-        StockField.SIMPLE_MOVING_AVERAGE_50,
-        StockField.SIMPLE_MOVING_AVERAGE_200,
-        StockField.YEARLY_PERFORMANCE,
-        StockField.EXCHANGE,
-    ]
+    def __init__(self, market="EURONEXT", TOTAL_STOCKS=300):
+        self.ss.set_range(0, TOTAL_STOCKS)
+        
+        # set markets
+        if market.upper() == "EURONEXT":
+            self.markets = self.euronext
+        else:
+            self.markets.append(market.upper())
+        self.setMarkets()
 
-    df = ss.get()
-    #df = limpia_duplicados(df)
-    return df
-
-
-def limpia_duplicados(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Quita las empresas duplicadas por cotizar en distintos exchanges
-    """
-
-    #df = df.sort_values("Market Capitalization", ascending=False)
-    return df.drop_duplicates(subset="ISIN", keep="first")
-
-
-def filtrar_candidatos(df: pd.DataFrame) -> pd.DataFrame:
-    """Aplica el filtro de gran capitalizacion + tendencia alcista + punto de entrada."""
-    
-    # filtra acciones demasiado caras
-    if MAX_PRICE > 0:
-        total = len(df)
-        df = df[df["Price"] <= MAX_PRICE]
-        print(f"\nDescartadas {total - len(df)} por tener un precio demasiado elevado.")
-
-    # filtra las top capitalización
-    df = df.sort_values("Market Capitalization", ascending=False).head(TOP_N_CAP)
-
-    # print(list(df.columns))
-    
-    condiciones = (
-        (df["Price"] > df["Simple Moving Average (200)"])
-        & (df["Simple Moving Average (50)"] > df["Simple Moving Average (200)"])
-        & (df["Yearly Performance"] > MIN_PERFORMANCE_1Y)
-        & (df["Relative Strength Index (14)"].between(RSI_MIN, RSI_MAX))
-    )
-
-    return df[condiciones].copy()
-
-
-def main():
-    print("Descargando tickers...")
-    df = obtener_candidatos()
-    print(f"Total empresas obtenidas: {len(df)}")
-
-    candidatos = filtrar_candidatos(df)
-
-    columnas_mostrar = [
+        # get stocks
+        self.stocks = self.getStocks()
+        
+        # filter stocks
+        self.candidates = self.getCandidates()
+        
+        # show results
+        columnas_mostrar = [
         "Name",
         "ISIN",
         "Exchange",
@@ -111,20 +59,78 @@ def main():
         "Simple Moving Average (50)",
         "Simple Moving Average (200)",
         "Yearly Performance",
-    ]
+        ]
 
-    if candidatos.empty:
-        print("\nNingun candidato cumple todos los criterios hoy.")
-    else:
-        print(f"\n{len(candidatos)} candidato(s) encontrados:\n")
+        if self.candidates.empty:
+            print("\nNingun candidato cumple todos los criterios hoy.")
+        else:
+            print(f"\n{len(self.candidates)} candidato(s) encontrados:\n")
+            
+            # convertimos el valor de capitalizacion a valores leíbles
+            candidatos_final = self.candidates[columnas_mostrar].copy()
+            candidatos_final["Market Capitalization"] = (candidatos_final["Market Capitalization"] / 1_000_000_000).round(2).astype(str) + " B"
+
+            print(candidatos_final.to_string(index=False))
+
+    def setMarkets(self):
+        """Carga la lista de markets y la setea al screener"""
+        mlist = []
+        for m in self.markets:
+            if not hasattr(tvs.Market, m):
+                disponibles = [d.name for d in tvs.Market]
+                raise ValueError(f"Mercado '{m}' no existe. Disponibles: {disponibles}")
+            mlist.append(getattr(tvs.Market, m))
+        self.ss.set_markets(*mlist)
+    
+    def getStocks(self) -> pd.DataFrame:
+        """Devuelva la lista completa de stocks"""
+        self.ss.specific_fields = [
+            StockField.NAME,
+            StockField.ISIN,
+            StockField.PRICE,
+            StockField.MARKET_CAPITALIZATION,
+            StockField.RELATIVE_STRENGTH_INDEX_14,
+            StockField.SIMPLE_MOVING_AVERAGE_50,
+            StockField.SIMPLE_MOVING_AVERAGE_200,
+            StockField.YEARLY_PERFORMANCE,
+            StockField.EXCHANGE,
+        ]
+        df = self.ss.get()
+        # filtrar duplicados?
+        return df
+
+    def getCandidates(self) -> pd.DataFrame:
+        """Aplica el filtro de gran capitalizacion + tendencia alcista + punto de entrada."""
         
-        # convertimos el valor de capitalizacion a valores leíbles
-        candidatos_final = candidatos[columnas_mostrar].copy()
-        candidatos_final["Market Capitalization"] = (candidatos_final["Market Capitalization"] / 1_000_000_000).round(2).astype(str) + " B"
+        df = self.stocks
+        # filtra acciones demasiado caras
+        if MAX_PRICE > 0:
+            total = len(df)
+            df = df[df["Price"] <= MAX_PRICE]
+            print(f"\nDescartadas {total - len(df)} por tener un precio demasiado elevado.")
 
-        print(candidatos_final.to_string(index=False))
+        # filtra las top capitalización
+        df = df.sort_values("Market Capitalization", ascending=False).head(TOP_N_CAP)
 
-    return candidatos
+        # print(list(df.columns))
+        
+        condiciones = (
+            (df["Price"] > df["Simple Moving Average (200)"])
+            & (df["Simple Moving Average (50)"] > df["Simple Moving Average (200)"])
+            & (df["Yearly Performance"] > MIN_PERFORMANCE_1Y)
+            & (df["Relative Strength Index (14)"].between(RSI_MIN, RSI_MAX))
+        )
+
+        return df[condiciones].copy()
+
+
+# def limpia_duplicados(df: pd.DataFrame) -> pd.DataFrame:
+#     """
+#     Quita las empresas duplicadas por cotizar en distintos exchanges
+#     """
+
+#     #df = df.sort_values("Market Capitalization", ascending=False)
+#     return df.drop_duplicates(subset="ISIN", keep="first")
 
 
 if __name__ == "__main__":
@@ -133,4 +139,4 @@ if __name__ == "__main__":
         if args[1] == "test":
             print([m.name for m in tvs.Market])
             sys.exit()
-    main()
+    sf = StocksFinder(market="FRANCE")
