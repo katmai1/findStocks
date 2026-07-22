@@ -27,7 +27,7 @@ MAX_PRICE = 180   # filtra las que tienen un precio demasiado alto. Para desacti
 MAX_STOCKS = 300  # maximo de stocks que va a coger de los markets (antes de filtrar)
 
 def obtener_candidatos() -> pd.DataFrame:
-    """Descarga el screener de Euronext (FR, NL, BE, PT) con los campos necesarios."""
+    """Descarga el screener de los paises activados con los campos necesarios."""
     ss = tvs.StockScreener()
     ## print([m for m in dir(ss) if not m.startswith('_')])
     ss.set_range(0, MAX_STOCKS)
