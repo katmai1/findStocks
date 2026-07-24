@@ -12,6 +12,7 @@ Requisitos:
 """
 
 import argparse
+import argparse
 import tvscreener as tvs
 from tvscreener import StockField
 import pandas as pd
@@ -24,7 +25,6 @@ class StocksFinder:
     euronext = ["FRANCE", "NETHERLANDS", "BELGIUM", "PORTUGAL"]
     markets = []
     # options
-    TOP_N_CAP = 20          # cuantas empresas de mayor capitalizacion evaluar
     RSI_MIN, RSI_MAX = 35, 50  # zona de pullback sano
     MIN_PERFORMANCE_1Y = 0.0   # rendimiento minimo a 1 ano (en %)
     MAX_PRICE = 180   # descarta las que tienen un precio demasiado alto. Para desactivar el filtro poner valor 0.
@@ -89,10 +89,16 @@ class StocksFinder:
             ss_market.set_markets(getattr(tvs.Market, market))
             ss_market.specific_fields = campos
 
-            df_market = ss_market.get()
-            df_market["Market"] = market
-            print(f"\n{market}: {len(df_market)} stocks")
-            frames.append(df_market)
+            try:
+                df_market = ss_market.get()
+            except Exception as e:
+                print(f"Error obteniendo {market}: {e}")
+                continue
+            finally:
+                df_market["Market"] = market
+                print(f"\n{market}: {len(df_market)} stocks")
+                frames.append(df_market)
+            
         
         df = pd.concat(frames, ignore_index=True)
         # filtrar duplicados?
@@ -103,8 +109,13 @@ class StocksFinder:
         """Aplica el filtro de gran capitalizacion + tendencia alcista + punto de entrada."""
         
         df = self.stocks
-        # print(df["Volume*Price"].describe())
-        # filtra acciones demasiado caras
+
+        # descarta los q tengan valores NA
+        antes = len(df)
+        df = df.dropna(subset=["Price", "Simple Moving Average (50)", "Simple Moving Average (200)", "Relative Strength Index (14)"])
+        print(f"Descartados {antes - len(df)} por datos incompletos.")
+
+        # descarta acciones demasiado caras
         if self.MAX_PRICE > 0:
             total = len(df)
             df = df[df["Price"] <= self.MAX_PRICE]
@@ -112,16 +123,19 @@ class StocksFinder:
 
         # filtra las top capitalización x mercado
         df = (df.sort_values("Market Capitalization", ascending=False).groupby("Market", group_keys=False).head(self.TOP_N_CAP))
-        distancia_sma200 = (df["Price"] - df["Simple Moving Average (200)"]) / df["Simple Moving Average (200)"]
 
         # condiciones tecnicas
         c_tendencia = df["Price"] > df["Simple Moving Average (200)"]
         c_pendiente = df["Simple Moving Average (50)"] > df["Simple Moving Average (200)"]
         c_performance = df["Yearly Performance"] > self.MIN_PERFORMANCE_1Y
         c_rsi = df["Relative Strength Index (14)"].between(self.RSI_MIN, self.RSI_MAX)
-        c_distancia = distancia_sma200 <= self.MAX_DISTANCIA_SMA200
         c_vol_rel = df["Relative Volume"] <= self.MAX_VOLUMEN_RELATIVO
         c_valor_negociado = df["Volume*Price"] >= self.MIN_VOLUME
+        
+        # condicion distancia a sma200
+        sma200 = df["Simple Moving Average (200)"].replace(0, pd.NA)    # filtra errores
+        distancia_sma200 = (df["Price"] - sma200) / sma200
+        c_distancia = distancia_sma200 <= self.MAX_DISTANCIA_SMA200
 
         condiciones = (
             c_tendencia             # check tendencia alcista
@@ -179,10 +193,14 @@ def parse_args():
         help="Top de empresas por capitalización. Default: 20"
     )
 
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not args.market:
+        parser.error("--market requiere al menos un valor (ej: -m EURONEXT FRANCE)")
+    return args
 
 if __name__ == "__main__":
     args = parse_args()
+
     sf = StocksFinder(market=args.market)
     sf.TOP_N_CAP = args.top
     sf.run()
