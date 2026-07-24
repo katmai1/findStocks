@@ -12,7 +12,6 @@ Requisitos:
 """
 
 import argparse
-import argparse
 import tvscreener as tvs
 from tvscreener import StockField
 import pandas as pd
@@ -25,13 +24,16 @@ class StocksFinder:
     euronext = ["FRANCE", "NETHERLANDS", "BELGIUM", "PORTUGAL"]
     markets = []
     # options
+    TOP_N_CAP = 30
     RSI_MIN, RSI_MAX = 35, 50  # zona de pullback sano
     MIN_PERFORMANCE_1Y = 0.0   # rendimiento minimo a 1 ano (en %)
     MAX_PRICE = 180   # descarta las que tienen un precio demasiado alto. Para desactivar el filtro poner valor 0.
     MAX_STOCKS = 300  # maximo de stocks que va a coger de los markets (antes de filtrar)
     MAX_DISTANCIA_SMA200 = 0.15 # descarta los que estan demasiado sobreextendidos
     MAX_VOLUMEN_RELATIVO = 1.0 # descarta los que aumentaron su volumen durente la corrección
-    MIN_VOLUME = 100_000  # volumen medio diario minimo 
+    MIN_VOLUME = 100_000  # volumen medio diario minimo
+    MIN_ADX = 20  # ADX(14) minimo para descartar mercados laterales sin tendencia clara 
+
     def __init__(self, market="EURONEXT"):        
         # normaliza a lista, sea cual sea la entrada (str suelto o lista)
         if isinstance(market, str):
@@ -75,6 +77,7 @@ class StocksFinder:
             StockField.PRICE,
             StockField.MARKET_CAPITALIZATION,
             StockField.RELATIVE_STRENGTH_INDEX_14,
+            StockField.AVERAGE_DIRECTIONAL_INDEX_14,
             StockField.SIMPLE_MOVING_AVERAGE_50,
             StockField.SIMPLE_MOVING_AVERAGE_200,
             StockField.YEARLY_PERFORMANCE,
@@ -91,13 +94,12 @@ class StocksFinder:
 
             try:
                 df_market = ss_market.get()
-            except Exception as e:
-                print(f"Error obteniendo {market}: {e}")
-                continue
-            finally:
                 df_market["Market"] = market
                 print(f"\n{market}: {len(df_market)} stocks")
                 frames.append(df_market)
+            except Exception as e:
+                print(f"Error obteniendo {market}: {e}")
+                continue
             
         
         df = pd.concat(frames, ignore_index=True)
@@ -112,7 +114,10 @@ class StocksFinder:
 
         # descarta los q tengan valores NA
         antes = len(df)
-        df = df.dropna(subset=["Price", "Simple Moving Average (50)", "Simple Moving Average (200)", "Relative Strength Index (14)"])
+        df = df.dropna(subset=[
+            "Price", "Simple Moving Average (50)", "Simple Moving Average (200)",
+            "Relative Strength Index (14)", "Average Directional Index (14)"
+            ])
         print(f"Descartados {antes - len(df)} por datos incompletos.")
 
         # descarta acciones demasiado caras
@@ -131,6 +136,7 @@ class StocksFinder:
         c_rsi = df["Relative Strength Index (14)"].between(self.RSI_MIN, self.RSI_MAX)
         c_vol_rel = df["Relative Volume"] <= self.MAX_VOLUMEN_RELATIVO
         c_valor_negociado = df["Volume*Price"] >= self.MIN_VOLUME
+        c_adx = df["Average Directional Index (14)"] > self.MIN_ADX
         
         # condicion distancia a sma200
         sma200 = df["Simple Moving Average (200)"].replace(0, pd.NA)    # filtra errores
@@ -145,6 +151,7 @@ class StocksFinder:
             & c_distancia           # check que no esté sobreextendida, descartando las que estan demasiado alejadas del sma200
             & c_vol_rel             # check volumen relativo a los 10 ultimos dias, para descartar las que tengan fuertes ventas
             & c_valor_negociado     # check acciones con valor demasiado poco volumen (en divisa)
+            & c_adx                 # check ADX(14) > MIN_ADX, para descartar rangos laterales sin tendencia clara
         )
 
         return df[condiciones].copy()
@@ -159,9 +166,11 @@ class StocksFinder:
         "Price",
         "Market Capitalization",
         "Relative Strength Index (14)",
+        # "Average Directional Index (14)",
         # "Simple Moving Average (50)",
         # "Simple Moving Average (200)",
         #"Yearly Performance",
+        "Volume*Price",
         "Relative Volume",
         ]
 
