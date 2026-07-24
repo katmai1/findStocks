@@ -16,7 +16,6 @@ import tvscreener as tvs
 from tvscreener import StockField
 import pandas as pd
 import sys
-import argparse
 
 
 class StocksFinder:
@@ -32,8 +31,7 @@ class StocksFinder:
     MAX_STOCKS = 300  # maximo de stocks que va a coger de los markets (antes de filtrar)
     MAX_DISTANCIA_SMA200 = 0.15 # descarta los que estan demasiado sobreextendidos
     MAX_VOLUMEN_RELATIVO = 1.0 # descarta los que aumentaron su volumen durente la corrección
-    MIN_VOLUME = 100_000  # volumen medio diario minimo (numero de acciones, no €)
-
+    MIN_VOLUME = 100_000  # volumen medio diario minimo 
     def __init__(self, market="EURONEXT"):        
         # normaliza a lista, sea cual sea la entrada (str suelto o lista)
         if isinstance(market, str):
@@ -71,15 +69,12 @@ class StocksFinder:
 
     def getStocks(self) -> pd.DataFrame:
         """Devuelva la lista completa de stocks"""
-        # campo = StockField.SIMPLE_MOVING_AVERAGE_200(interval="1W")
-        # print([m for m in dir(campo) if not m.startswith('_')])
         campos = [
             StockField.NAME,
             StockField.ISIN,
             StockField.PRICE,
             StockField.MARKET_CAPITALIZATION,
             StockField.RELATIVE_STRENGTH_INDEX_14,
-            StockField.AVERAGE_VOLUME_10_DAY,
             StockField.SIMPLE_MOVING_AVERAGE_50,
             StockField.SIMPLE_MOVING_AVERAGE_200,
             StockField.YEARLY_PERFORMANCE,
@@ -117,15 +112,25 @@ class StocksFinder:
 
         # filtra las top capitalización x mercado
         df = (df.sort_values("Market Capitalization", ascending=False).groupby("Market", group_keys=False).head(self.TOP_N_CAP))
-        
+        distancia_sma200 = (df["Price"] - df["Simple Moving Average (200)"]) / df["Simple Moving Average (200)"]
+
         # condiciones tecnicas
+        c_tendencia = df["Price"] > df["Simple Moving Average (200)"]
+        c_pendiente = df["Simple Moving Average (50)"] > df["Simple Moving Average (200)"]
+        c_performance = df["Yearly Performance"] > self.MIN_PERFORMANCE_1Y
+        c_rsi = df["Relative Strength Index (14)"].between(self.RSI_MIN, self.RSI_MAX)
+        c_distancia = distancia_sma200 <= self.MAX_DISTANCIA_SMA200
+        c_vol_rel = df["Relative Volume"] <= self.MAX_VOLUMEN_RELATIVO
+        c_valor_negociado = df["Volume*Price"] >= self.MIN_VOLUME
+
         condiciones = (
-            (df["Price"] > df["Simple Moving Average (200)"])
-            & (df["Simple Moving Average (50)"] > df["Simple Moving Average (200)"])
-            & (df["Yearly Performance"] > self.MIN_PERFORMANCE_1Y)
-            & (df["Relative Strength Index (14)"].between(self.RSI_MIN, self.RSI_MAX))
-            & (df["Relative Volume"] <= self.MAX_VOLUMEN_RELATIVO)
-            & (df["Volume*Price"] >= self.MIN_VOLUME)
+            c_tendencia             # check tendencia alcista
+            & c_pendiente           # check que la sma corta esté por encima de la larga
+            & c_performance         # check positivo en el ultimo año
+            & c_rsi                 # check RSI entre 35-50, por ser una zona de pullback sano
+            & c_distancia           # check que no esté sobreextendida, descartando las que estan demasiado alejadas del sma200
+            & c_vol_rel             # check volumen relativo a los 10 ultimos dias, para descartar las que tengan fuertes ventas
+            & c_valor_negociado     # check acciones con valor demasiado poco volumen (en divisa)
         )
 
         return df[condiciones].copy()
