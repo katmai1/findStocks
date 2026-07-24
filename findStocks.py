@@ -28,11 +28,12 @@ class StocksFinder:
     RSI_MIN, RSI_MAX = 35, 50  # zona de pullback sano
     MIN_PERFORMANCE_1Y = 0.0   # rendimiento minimo a 1 ano (en %)
     MAX_PRICE = 180   # descarta las que tienen un precio demasiado alto. Para desactivar el filtro poner valor 0.
-    MAX_STOCKS = 300  # maximo de stocks que va a coger de los markets (antes de filtrar)
-    MAX_DISTANCIA_SMA200 = 0.15 # descarta los que estan demasiado sobreextendidos
+    MAX_STOCKS = 500  # maximo de stocks que va a coger de los markets (antes de filtrar)
+    MAX_DISTANCE_SMA200 = 0.15 # descarta los que estan demasiado sobreextendidos
     MAX_VOLUMEN_RELATIVO = 1.0 # descarta los que aumentaron su volumen durente la corrección
-    MIN_VOLUME = 100_000  # volumen medio diario minimo
-    MIN_ADX = 20  # ADX(14) minimo para descartar mercados laterales sin tendencia clara 
+    MIN_VOLUME = 30_000  # volumen medio diario minimo
+    MIN_ADX = 20  # ADX(14) minimo para descartar mercados laterales sin tendencia clara
+    DAYS_MIN_EARNINGS = 0      # descarta acciones con earnings dentro de N dias. Para desactivar poner valor 0.
 
     def __init__(self, market="EURONEXT"):        
         # normaliza a lista, sea cual sea la entrada (str suelto o lista)
@@ -84,6 +85,7 @@ class StocksFinder:
             StockField.EXCHANGE,
             StockField.RELATIVE_VOLUME,
             StockField.VOLUMEXPRICE,
+            StockField.UPCOMING_EARNINGS_DATE,
         ]
         frames = []
         for market in self.markets:
@@ -141,7 +143,15 @@ class StocksFinder:
         # condicion distancia a sma200
         sma200 = df["Simple Moving Average (200)"].replace(0, pd.NA)    # filtra errores
         distancia_sma200 = (df["Price"] - sma200) / sma200
-        c_distancia = distancia_sma200 <= self.MAX_DISTANCIA_SMA200
+        c_distancia = distancia_sma200 <= self.MAX_DISTANCE_SMA200
+
+        # condicion earnings
+        if self.DAYS_MIN_EARNINGS > 0:
+            fecha_earnings = pd.to_datetime(df["Upcoming Earnings Date"], errors="coerce", utc=True)
+            dias_hasta_earnings = (fecha_earnings - pd.Timestamp.now(tz="UTC")).dt.days
+            c_earnings = dias_hasta_earnings.isna() | (dias_hasta_earnings > self.DAYS_MIN_EARNINGS)
+        else:
+            c_earnings = pd.Series(True, index=df.index)
 
         condiciones = (
             c_tendencia             # check tendencia alcista
@@ -152,6 +162,7 @@ class StocksFinder:
             & c_vol_rel             # check volumen relativo a los 10 ultimos dias, para descartar las que tengan fuertes ventas
             & c_valor_negociado     # check acciones con valor demasiado poco volumen (en divisa)
             & c_adx                 # check ADX(14) > MIN_ADX, para descartar rangos laterales sin tendencia clara
+            & c_earnings            # check que no haya earnings inminentes
         )
 
         return df[condiciones].copy()
