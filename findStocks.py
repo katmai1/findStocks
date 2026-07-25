@@ -51,7 +51,8 @@ class StocksFinder:
     MAX_VOLUMEN_RELATIVO = 1.0 # descarta los que aumentaron su volumen durente la corrección
     MIN_VOLUME = 30_000  # volumen medio diario minimo
     MIN_ADX = 20  # ADX(14) minimo para descartar mercados laterales sin tendencia clara
-    DAYS_MIN_EARNINGS = 15      # descarta acciones con earnings dentro de N dias. Para desactivar poner valor 0.
+    DAYS_MIN_EARNINGS = 20      # descarta acciones con earnings dentro de N dias. Para desactivar poner valor 0.
+    DROP_NA = True
 
     def __init__(self, market="EURONEXT"):        
         # normaliza a lista, sea cual sea la entrada (str suelto o lista)
@@ -119,12 +120,13 @@ class StocksFinder:
         df = self.stocks
 
         # descarta los q tengan valores NA
-        antes = len(df)
-        df = df.dropna(subset=[
-            "Price", "Simple Moving Average (50)", "Simple Moving Average (200)",
-            "Relative Strength Index (14)", "Average Directional Index (14)"
-            ])
-        logger.info(f"Descartados {antes - len(df)} por datos incompletos.")
+        if self.DROP_NA:
+            antes = len(df)
+            df = df.dropna(subset=[
+                "Price", "Simple Moving Average (50)", "Simple Moving Average (200)",
+                "Relative Strength Index (14)", "Average Directional Index (14)"
+                ])
+            logger.info(f"Descartados {antes - len(df)} por datos incompletos.")
 
         # descarta acciones demasiado caras
         if self.MAX_PRICE > 0:
@@ -148,13 +150,6 @@ class StocksFinder:
         sma200 = df["Simple Moving Average (200)"].replace(0, pd.NA)    # filtra errores
         distancia_sma200 = (df["Price"] - sma200) / sma200
         c_distancia = distancia_sma200 <= self.MAX_DISTANCE_SMA200
-        # condicion earnings
-        if self.DAYS_MIN_EARNINGS > 0:
-            fecha_earnings = pd.to_datetime(df["Upcoming Earnings Date"], errors="coerce", utc=True)
-            dias_hasta_earnings = (fecha_earnings - pd.Timestamp.now(tz="UTC")).dt.days
-            c_earnings = dias_hasta_earnings.isna() | (dias_hasta_earnings > self.DAYS_MIN_EARNINGS)
-        else:
-            c_earnings = pd.Series(True, index=df.index)
 
         condiciones_base = (
             c_tendencia             # check tendencia alcista
@@ -166,10 +161,18 @@ class StocksFinder:
             & c_valor_negociado     # check acciones con valor demasiado poco volumen (en divisa)
             & c_adx                 # check ADX(14) > MIN_ADX, para descartar rangos laterales sin tendencia clara
         )
-        # cuenta los earnings
-        candidates = df[condiciones_base]
-        candidates_earnings = len(candidates) - len(candidates[c_earnings.loc[candidates.index]])
-        logger.info(f"Descartados {candidates_earnings} candidatos por tener earnings en los proximos {self.DAYS_MIN_EARNINGS} días")
+        
+        # condicion earnings
+        if self.DAYS_MIN_EARNINGS > 0:
+            fecha_earnings = pd.to_datetime(df["Upcoming Earnings Date"], errors="coerce", utc=True)
+            dias_hasta_earnings = (fecha_earnings - pd.Timestamp.now(tz="UTC")).dt.days
+            c_earnings = dias_hasta_earnings.isna() | (dias_hasta_earnings > self.DAYS_MIN_EARNINGS)
+            # cuenta los earnings
+            candidates = df[condiciones_base]
+            candidates_earnings = len(candidates) - len(candidates[c_earnings.loc[candidates.index]])
+            logger.info(f"Descartados {candidates_earnings} candidatos por tener earnings en los proximos {self.DAYS_MIN_EARNINGS} días")
+        else:
+            c_earnings = pd.Series(True, index=df.index)
 
         condiciones = condiciones_base & c_earnings
 
@@ -224,9 +227,10 @@ def parse_args():
         help="Top de empresas por capitalización. Default: 20"
     )
 
-    parser.add_argument("-e", "--earnings", help="Muestra candidatos aunque haya 'earnings' cerca.", action="store_true")
+    parser.add_argument("-e", "--show-earnings", help="Muestra candidatos aunque haya 'earnings' cerca.", action="store_true")
     parser.add_argument("--rsi-min", type=int, default=35, help="RSI mínimo de la zona de pullback")
     parser.add_argument("--rsi-max", type=int, default=50, help="RSI máximo de la zona de pullback")
+    parser.add_argument("-a", "--adx-min", type=int, default=20, help="ADX minimo")
     parser.add_argument("--max-price", type=float, default=180, help="Precio máximo (0 para desactivar)")
     parser.add_argument("-v", "--verbose", action="store_true", help="Muestra logs detallados (debug)")
     # -----------
@@ -258,7 +262,9 @@ if __name__ == "__main__":
     sf.RSI_MIN = args.rsi_min
     sf.RSI_MAX = args.rsi_max
     sf.MAX_PRICE = args.max_price
-    if args.earnings:
+    sf.MIN_ADX = args.adx_min
+
+    if args.show_earnings:
         sf.DAYS_MIN_EARNINGS = 0
     
     sf.run()
