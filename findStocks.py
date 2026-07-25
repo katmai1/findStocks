@@ -16,7 +16,6 @@ import argparse
 import tvscreener as tvs
 from tvscreener import StockField
 import pandas as pd
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -103,8 +102,8 @@ class StocksFinder:
                 df_market["Market"] = market
                 logger.info(f"{market}: {len(df_market)} stocks")
                 frames.append(df_market)
-            except Exception as e:
-                logger.error(f"Error obteniendo {market}")
+            except Exception:
+                logger.exception(f"Error obteniendo {market}")
                 continue
             
         if not frames:
