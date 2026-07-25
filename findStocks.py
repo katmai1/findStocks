@@ -20,6 +20,21 @@ import sys
 
 class StocksFinder:
 
+    campos = [
+        StockField.NAME,
+        StockField.ISIN,
+        StockField.PRICE,
+        StockField.MARKET_CAPITALIZATION,
+        StockField.RELATIVE_STRENGTH_INDEX_14,
+        StockField.AVERAGE_DIRECTIONAL_INDEX_14,
+        StockField.SIMPLE_MOVING_AVERAGE_50,
+        StockField.SIMPLE_MOVING_AVERAGE_200,
+        StockField.YEARLY_PERFORMANCE,
+        StockField.EXCHANGE,
+        StockField.RELATIVE_VOLUME,
+        StockField.VOLUMEXPRICE,
+        StockField.UPCOMING_EARNINGS_DATE,
+    ]
     # markets
     euronext = ["FRANCE", "NETHERLANDS", "BELGIUM", "PORTUGAL"]
     markets = []
@@ -31,9 +46,9 @@ class StocksFinder:
     MAX_STOCKS = 500  # maximo de stocks que va a coger de los markets (antes de filtrar)
     MAX_DISTANCE_SMA200 = 0.15 # descarta los que estan demasiado sobreextendidos
     MAX_VOLUMEN_RELATIVO = 1.0 # descarta los que aumentaron su volumen durente la corrección
-    MIN_VOLUME = 30_000  # volumen medio diario minimo
+    MIN_VOLUME = 1_000  # volumen medio diario minimo
     MIN_ADX = 20  # ADX(14) minimo para descartar mercados laterales sin tendencia clara
-    DAYS_MIN_EARNINGS = 0      # descarta acciones con earnings dentro de N dias. Para desactivar poner valor 0.
+    DAYS_MIN_EARNINGS = 15      # descarta acciones con earnings dentro de N dias. Para desactivar poner valor 0.
 
     def __init__(self, market="EURONEXT"):        
         # normaliza a lista, sea cual sea la entrada (str suelto o lista)
@@ -72,27 +87,12 @@ class StocksFinder:
 
     def getStocks(self) -> pd.DataFrame:
         """Devuelva la lista completa de stocks"""
-        campos = [
-            StockField.NAME,
-            StockField.ISIN,
-            StockField.PRICE,
-            StockField.MARKET_CAPITALIZATION,
-            StockField.RELATIVE_STRENGTH_INDEX_14,
-            StockField.AVERAGE_DIRECTIONAL_INDEX_14,
-            StockField.SIMPLE_MOVING_AVERAGE_50,
-            StockField.SIMPLE_MOVING_AVERAGE_200,
-            StockField.YEARLY_PERFORMANCE,
-            StockField.EXCHANGE,
-            StockField.RELATIVE_VOLUME,
-            StockField.VOLUMEXPRICE,
-            StockField.UPCOMING_EARNINGS_DATE,
-        ]
         frames = []
         for market in self.markets:
             ss_market = tvs.StockScreener()
             ss_market.set_range(0, self.MAX_STOCKS)
             ss_market.set_markets(getattr(tvs.Market, market))
-            ss_market.specific_fields = campos
+            ss_market.specific_fields = self.campos
 
             try:
                 df_market = ss_market.get()
@@ -103,7 +103,8 @@ class StocksFinder:
                 print(f"Error obteniendo {market}: {e}")
                 continue
             
-        
+        if not frames:
+            raise RuntimeError("No se obtenieron datos de ningun mercado")
         df = pd.concat(frames, ignore_index=True)
         # filtrar duplicados?
         print(f"\nObtenidos un total de {len(df)} stocks")
@@ -199,10 +200,11 @@ class StocksFinder:
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Script para encontrar entradas en largo en acciones")
+    # options
     parser.add_argument(
         "-m", "--market",
         nargs="*",
-        default="EURONEXT",
+        default=["EURONEXT"],
         help="Mercado para analizar. Ex: EURONEXT, AMERICA, GERMANY..."
     )
 
@@ -213,6 +215,8 @@ def parse_args():
         help="Top de empresas por capitalización. Default: 20"
     )
 
+    parser.add_argument("-e", "--earnings", help="Muestra candidatos aunque haya 'earnings' cerca.", action="store_true")
+    # -----------
     args = parser.parse_args()
     if not args.market:
         parser.error("--market requiere al menos un valor (ej: -m EURONEXT FRANCE)")
@@ -222,5 +226,9 @@ if __name__ == "__main__":
     args = parse_args()
 
     sf = StocksFinder(market=args.market)
+
     sf.TOP_N_CAP = args.top
+    if args.earnings:
+        sf.DAYS_MIN_EARNINGS = 0
+    
     sf.run()
