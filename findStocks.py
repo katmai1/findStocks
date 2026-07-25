@@ -11,15 +11,19 @@ Requisitos:
   pip install tvscreener pandas
 """
 
+import logging
 import argparse
 import tvscreener as tvs
 from tvscreener import StockField
 import pandas as pd
-import sys
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class StocksFinder:
 
+    # campos obtenidos por el screener
     campos = [
         StockField.NAME,
         StockField.ISIN,
@@ -46,7 +50,7 @@ class StocksFinder:
     MAX_STOCKS = 500  # maximo de stocks que va a coger de los markets (antes de filtrar)
     MAX_DISTANCE_SMA200 = 0.15 # descarta los que estan demasiado sobreextendidos
     MAX_VOLUMEN_RELATIVO = 1.0 # descarta los que aumentaron su volumen durente la corrección
-    MIN_VOLUME = 1_000  # volumen medio diario minimo
+    MIN_VOLUME = 30_000  # volumen medio diario minimo
     MIN_ADX = 20  # ADX(14) minimo para descartar mercados laterales sin tendencia clara
     DAYS_MIN_EARNINGS = 15      # descarta acciones con earnings dentro de N dias. Para desactivar poner valor 0.
 
@@ -97,17 +101,17 @@ class StocksFinder:
             try:
                 df_market = ss_market.get()
                 df_market["Market"] = market
-                print(f"\n{market}: {len(df_market)} stocks")
+                logger.info(f"{market}: {len(df_market)} stocks")
                 frames.append(df_market)
             except Exception as e:
-                print(f"Error obteniendo {market}: {e}")
+                logger.error(f"Error obteniendo {market}")
                 continue
             
         if not frames:
             raise RuntimeError("No se obtenieron datos de ningun mercado")
         df = pd.concat(frames, ignore_index=True)
         # filtrar duplicados?
-        print(f"\nObtenidos un total de {len(df)} stocks")
+        logger.info(f"Obtenidos un total de {len(df)} stocks")
         return df
 
     def getCandidates(self) -> pd.DataFrame:
@@ -121,13 +125,13 @@ class StocksFinder:
             "Price", "Simple Moving Average (50)", "Simple Moving Average (200)",
             "Relative Strength Index (14)", "Average Directional Index (14)"
             ])
-        print(f"Descartados {antes - len(df)} por datos incompletos.")
+        logger.info(f"Descartados {antes - len(df)} por datos incompletos.")
 
         # descarta acciones demasiado caras
         if self.MAX_PRICE > 0:
             total = len(df)
             df = df[df["Price"] <= self.MAX_PRICE]
-            print(f"\nDescartadas {total - len(df)} por tener un precio demasiado elevado.")
+            logger.info(f"Descartadas {total - len(df)} por tener un precio demasiado elevado.")
 
         # filtra las top capitalización x mercado
         df = (df.sort_values("Market Capitalization", ascending=False).groupby("Market", group_keys=False).head(self.TOP_N_CAP))
@@ -145,7 +149,6 @@ class StocksFinder:
         sma200 = df["Simple Moving Average (200)"].replace(0, pd.NA)    # filtra errores
         distancia_sma200 = (df["Price"] - sma200) / sma200
         c_distancia = distancia_sma200 <= self.MAX_DISTANCE_SMA200
-
         # condicion earnings
         if self.DAYS_MIN_EARNINGS > 0:
             fecha_earnings = pd.to_datetime(df["Upcoming Earnings Date"], errors="coerce", utc=True)
@@ -154,7 +157,7 @@ class StocksFinder:
         else:
             c_earnings = pd.Series(True, index=df.index)
 
-        condiciones = (
+        condiciones_base = (
             c_tendencia             # check tendencia alcista
             & c_pendiente           # check que la sma corta esté por encima de la larga
             & c_performance         # check positivo en el ultimo año
@@ -163,8 +166,13 @@ class StocksFinder:
             & c_vol_rel             # check volumen relativo a los 10 ultimos dias, para descartar las que tengan fuertes ventas
             & c_valor_negociado     # check acciones con valor demasiado poco volumen (en divisa)
             & c_adx                 # check ADX(14) > MIN_ADX, para descartar rangos laterales sin tendencia clara
-            & c_earnings            # check que no haya earnings inminentes
         )
+        # cuenta los earnings
+        candidates = df[condiciones_base]
+        candidates_earnings = len(candidates) - len(candidates[c_earnings.loc[candidates.index]])
+        logger.info(f"Descartados {candidates_earnings} candidatos por tener earnings en los proximos {self.DAYS_MIN_EARNINGS} días")
+
+        condiciones = condiciones_base & c_earnings
 
         return df[condiciones].copy()
 
@@ -187,9 +195,9 @@ class StocksFinder:
         ]
 
         if self.candidates.empty:
-            print("\nNingun candidato cumple todos los criterios hoy.")
+            logger.info("Ningun candidato cumple todos los criterios hoy.")
         else:
-            print(f"\n{len(self.candidates)} candidato(s) encontrados:\n")
+            print(f"\n Encontrado(s) {len(self.candidates)} candidato(s):\n")
             
             # convertimos el valor de capitalizacion a valores leíbles
             candidatos_final = self.candidates[columnas_mostrar].copy()
@@ -197,6 +205,8 @@ class StocksFinder:
 
             print(candidatos_final.to_string(index=False))
 
+#####################
+### OPTIONS
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Script para encontrar entradas en largo en acciones")
@@ -216,18 +226,39 @@ def parse_args():
     )
 
     parser.add_argument("-e", "--earnings", help="Muestra candidatos aunque haya 'earnings' cerca.", action="store_true")
+    parser.add_argument("--rsi-min", type=int, default=35, help="RSI mínimo de la zona de pullback")
+    parser.add_argument("--rsi-max", type=int, default=50, help="RSI máximo de la zona de pullback")
+    parser.add_argument("--max-price", type=float, default=180, help="Precio máximo (0 para desactivar)")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Muestra logs detallados (debug)")
     # -----------
     args = parser.parse_args()
     if not args.market:
         parser.error("--market requiere al menos un valor (ej: -m EURONEXT FRANCE)")
     return args
 
+###################
+### LOGGING
+
+def setup_logging(verbose=False):
+    nivel = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=nivel,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+
+### MAIN
 if __name__ == "__main__":
     args = parse_args()
+    setup_logging(args.verbose)
 
     sf = StocksFinder(market=args.market)
 
     sf.TOP_N_CAP = args.top
+    sf.RSI_MIN = args.rsi_min
+    sf.RSI_MAX = args.rsi_max
+    sf.MAX_PRICE = args.max_price
     if args.earnings:
         sf.DAYS_MIN_EARNINGS = 0
     
