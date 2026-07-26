@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "findstocks"
+version = "0.1.0"
+description = "Screener de acciones en fase de pullback dentro de una tendencia alcista"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+dependencies = [
+    "pandas",
+    "tvscreener",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+]
+
+[project.scripts]
+findstocks = "findstocks.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+# FA100: preferimos anotaciones explícitas (Optional[...]) por claridad sobre
+# `from __future__ import annotations`. EXE001: main.py se ejecuta con
+# `python main.py`, no necesita ser ejecutable.
+ignore = ["FA100", "EXE001"]

@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+
+# resultados exportados
+*.csv
+*.xlsx
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# tests
+.pytest_cache/
+.ruff_cache/

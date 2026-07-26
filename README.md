@@ -19,7 +19,25 @@ La idea es encontrar acciones que:
 - **Sin earnings inminentes**: descarta acciones con resultados dentro de los próximos N días (configurable, o desactivable).
 - **Filtro de precio máximo** y **top N por capitalización** por mercado (desactivables).
 
+## Estructura del proyecto
+
+```
+findStocks/
+├── src/findstocks/
+│   ├── config.py          # umbrales del screener (ScreenerConfig)
+│   ├── markets.py         # expansión/validación de mercados
+│   ├── screener.py        # obtención de datos + filtrado (lógica pura testeable)
+│   ├── output.py          # presentación en consola y export a CSV/XLSX
+│   ├── cli.py              # parseo de argumentos y orquestación
+│   └── logging_setup.py
+├── tests/                  # tests unitarios (pytest)
+├── main.py                 # punto de entrada
+└── pyproject.toml
+```
+
 ## Instalar requisitos
+
+Opción rápida (solo ejecutar el script):
 
 ```bash
 python3 -m venv .venv
@@ -27,29 +45,42 @@ source .venv/bin/activate       # en Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+Opción recomendada (instala el paquete y el comando `findstocks`, incluye deps de test/lint):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
 ## Uso
 
 ```bash
-python3 findStocks.py [opciones]
+python3 main.py [opciones]
+# o, si instalaste con pip install -e ".[dev]":
+findstocks [opciones]
 ```
 
 Ejemplos:
 
 ```bash
 # Por defecto analiza EURONEXT (Francia, Países Bajos, Bélgica, Portugal)
-python3 findStocks.py
+python3 main.py
 
 # Analizar varios mercados a la vez
-python3 findStocks.py -m FRANCE GERMANY AMERICA
+python3 main.py -m FRANCE GERMANY AMERICA
 
 # Ajustar la zona de RSI de pullback y el precio máximo
-python3 findStocks.py --rsi-min 30 --rsi-max 45 --max-price 250
+python3 main.py --rsi-min 30 --rsi-max 45 --max-price 250
 
 # Top 50 por capitalización y logs detallados
-python3 findStocks.py -t 50 -v
+python3 main.py -t 50 -v
 
 # Incluir candidatos aunque tengan earnings próximos
-python3 findStocks.py -e
+python3 main.py -e
+
+# Exportar resultados a CSV
+python3 main.py -o candidatos.csv
 ```
 
 ### Opciones disponibles
@@ -62,11 +93,28 @@ python3 findStocks.py -e
 | `--rsi-min` | RSI mínimo de la zona de pullback. | `35` |
 | `--rsi-max` | RSI máximo de la zona de pullback. | `50` |
 | `--max-price` | Precio máximo del valor (`0` para desactivar el filtro). | `180` |
+| `--min-adx` | ADX(14) mínimo. | `20` |
+| `--max-distance-sma200` | Distancia máxima al SMA200 (proporción). | `0.15` |
+| `--min-volume` | Volumen medio diario mínimo (en valor). | `30000` |
+| `--earnings-days` | Días mínimos hasta earnings para no descartar. | `15` |
+| `-o`, `--output` | Exporta los resultados a un archivo `.csv` o `.xlsx`. | Sin exportar |
 | `-v`, `--verbose` | Muestra logs detallados (nivel debug). | Desactivado |
 
 ## Salida
 
 El script imprime por consola una tabla con los candidatos encontrados, incluyendo ISIN, nombre, mercado, exchange, precio, capitalización, RSI(14), volumen en valor y volumen relativo. Si ningún valor cumple los criterios ese día, se informa por log.
+
+## Tests
+
+```bash
+pip install -e ".[dev]"
+pytest
+ruff check .
+```
+
+Los tests cubren la lógica de filtrado (`findstocks.screener.filter_candidates`) y
+la expansión de mercados (`findstocks.markets`), sin necesidad de red. En cada push
+se ejecutan automáticamente vía GitHub Actions (`.github/workflows/ci.yml`).
 
 ## Requisitos
 
