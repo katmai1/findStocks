@@ -125,12 +125,6 @@ def filter_candidates(df: pd.DataFrame, config: ScreenerConfig) -> pd.DataFrame:
     distancia_sma200 = (df["Price"] - sma200) / sma200
     c_distancia = distancia_sma200 <= config.max_distance_sma200
 
-    if config.days_min_earnings > 0:
-        fecha_earnings = pd.to_datetime(df["Upcoming Earnings Date"], errors="coerce", utc=True)
-        dias_hasta_earnings = (fecha_earnings - pd.Timestamp.now(tz="UTC")).dt.days
-        c_earnings = dias_hasta_earnings.isna() | (dias_hasta_earnings > config.days_min_earnings)
-    else:
-        c_earnings = pd.Series(True, index=df.index)
 
     condiciones_base = (
         c_tendencia
@@ -143,12 +137,15 @@ def filter_candidates(df: pd.DataFrame, config: ScreenerConfig) -> pd.DataFrame:
         & c_adx
     )
 
-    candidates = df[condiciones_base]
-    candidates_earnings = len(candidates) - len(candidates[c_earnings.loc[candidates.index]])
-    logger.info(
-        f"Descartados {candidates_earnings} candidatos por tener earnings "
-        f"en los proximos {config.days_min_earnings} días"
-    )
+    if config.days_min_earnings > 0:
+        fecha_earnings = pd.to_datetime(df["Upcoming Earnings Date"], errors="coerce", utc=True)
+        dias_hasta_earnings = (fecha_earnings - pd.Timestamp.now(tz="UTC")).dt.days
+        c_earnings = dias_hasta_earnings.isna() | (dias_hasta_earnings > config.days_min_earnings)
+        candidates = df[condiciones_base]
+        candidates_earnings = len(candidates) - len(candidates[c_earnings.loc[candidates.index]])
+        logger.info(f"Descartados {candidates_earnings} candidatos por tener earnings en los proximos {config.days_min_earnings} días")
+    else:
+        c_earnings = pd.Series(True, index=df.index)
 
     condiciones = condiciones_base & c_earnings
     return df[condiciones].copy()
