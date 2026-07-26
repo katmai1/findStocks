@@ -10,11 +10,10 @@ logger = logging.getLogger(__name__)
 
 
 def format_candidates(candidates: pd.DataFrame) -> pd.DataFrame:
-    """Prepara una copia legible de los candidatos (capitalización en B)."""
+    """Prepara una copia legible de los candidatos"""
     df = candidates[COLUMNAS_MOSTRAR].copy()
-    df["Market Capitalization"] = (
-        (df["Market Capitalization"] / 1_000_000_000).round(2).astype(str) + " B"
-    )
+    df["Market Capitalization"] = ((df["Market Capitalization"] / 1_000_000_000).round(2).astype(str) + " B")
+    df["Volume*Price"] = ((df["Volume*Price"] / 1_000_000).round(2).astype(str) + " M")
     return df
 
 
