@@ -106,3 +106,30 @@ def test_top_n_cap_per_market(config):
     result = filter_candidates(df, config)
     assert len(result) == 1
     assert result.iloc[0]["Market Capitalization"] == 9_000_000_000
+
+
+def test_top_n_cap_preserves_market_column(config):
+    # regresión: antes, groupby().apply() descartaba la columna "Market"
+    # del resultado en versiones recientes de pandas
+    config.top_n_cap = 100
+    df = pd.DataFrame([
+        make_row(**{"Market Capitalization": 1_000_000_000}),
+        make_row(**{"Market Capitalization": 9_000_000_000}),
+    ])
+    result = filter_candidates(df, config)
+    assert "Market" in result.columns
+
+
+def test_top_n_cap_keeps_highest_market_cap(config):
+    # regresión: antes no se ordenaba por capitalización antes de recortar,
+    # así que "top" no cogía necesariamente las de mayor capitalización
+    config.top_n_cap = 50
+    df = pd.DataFrame([
+        make_row(**{"Market Capitalization": 1_000_000_000}),
+        make_row(**{"Market Capitalization": 2_000_000_000}),
+        make_row(**{"Market Capitalization": 9_000_000_000}),
+        make_row(**{"Market Capitalization": 3_000_000_000}),
+    ])
+    result = filter_candidates(df, config)
+    assert len(result) == 2
+    assert set(result["Market Capitalization"]) == {9_000_000_000, 3_000_000_000}

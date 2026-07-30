@@ -109,19 +109,16 @@ def filter_candidates(df: pd.DataFrame, config: ScreenerConfig) -> pd.DataFrame:
         logger.info(f"Descartadas {total - len(df)} por tener un precio demasiado elevado.")
 
     # filtra top%
+    df = df.sort_values("Market Capitalization", ascending=False)
     antes_top = len(df)
     percent = config.top_n_cap / 100
-    def _cabeza_pct(grupo: pd.DataFrame) -> pd.DataFrame:
-        n = max(1, math.ceil(len(grupo) * percent))
-        return grupo.head(n)
-    df = df.groupby("Market", group_keys=False).apply(_cabeza_pct)
-    logger.info(f"Aplicado top_pct={config.top_n_cap}%: {antes_top} -> {len(df)}")
-    # df = (
-    #     df.sort_values("Market Capitalization", ascending=False)
-    #     .groupby("Market", group_keys=False)
-    #     .head(config.top_n_cap)
-    # )
+    tamano_mercado = df.groupby("Market")["Market"].transform("size")
+    n_por_mercado = (tamano_mercado * percent).apply(math.ceil).clip(lower=1)
+    rango_en_mercado = df.groupby("Market").cumcount() + 1
+    df = df[rango_en_mercado <= n_por_mercado]
+    logger.info(f"Filtrando el {config.top_n_cap}% de las top: {antes_top} -> {len(df)}")
 
+    # conficiones
     c_tendencia = df["Price"] > df["Simple Moving Average (200)"]
     c_pendiente = df["Simple Moving Average (50)"] > df["Simple Moving Average (200)"]
     c_performance = df["Yearly Performance"] > config.min_performance_1y
