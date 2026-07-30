@@ -5,6 +5,7 @@ red. `filter_candidates` es una función pura sobre un DataFrame y no
 depende de red, lo que la hace fácil de testear.
 """
 
+import math
 import logging
 from typing import List, Optional
 
@@ -107,11 +108,19 @@ def filter_candidates(df: pd.DataFrame, config: ScreenerConfig) -> pd.DataFrame:
         df = df[df["Price"] <= config.max_price]
         logger.info(f"Descartadas {total - len(df)} por tener un precio demasiado elevado.")
 
-    df = (
-        df.sort_values("Market Capitalization", ascending=False)
-        .groupby("Market", group_keys=False)
-        .head(config.top_n_cap)
-    )
+    # filtra top%
+    antes_top = len(df)
+    percent = config.top_n_cap / 100
+    def _cabeza_pct(grupo: pd.DataFrame) -> pd.DataFrame:
+        n = max(1, math.ceil(len(grupo) * percent))
+        return grupo.head(n)
+    df = df.groupby("Market", group_keys=False).apply(_cabeza_pct)
+    logger.info(f"Aplicado top_pct={config.top_n_cap}%: {antes_top} -> {len(df)}")
+    # df = (
+    #     df.sort_values("Market Capitalization", ascending=False)
+    #     .groupby("Market", group_keys=False)
+    #     .head(config.top_n_cap)
+    # )
 
     c_tendencia = df["Price"] > df["Simple Moving Average (200)"]
     c_pendiente = df["Simple Moving Average (50)"] > df["Simple Moving Average (200)"]
