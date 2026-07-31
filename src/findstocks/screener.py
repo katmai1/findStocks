@@ -39,6 +39,7 @@ COLUMNAS_REQUERIDAS = [
     "Simple Moving Average (200)",
     "Relative Strength Index (14)",
     "Average Directional Index (14)",
+    #"Market Capitalization",
 ]
 
 COLUMNAS_MOSTRAR = [
