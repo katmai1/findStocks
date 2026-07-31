@@ -12,7 +12,7 @@ from typing import List, Optional
 import pandas as pd
 
 from .config import ScreenerConfig
-from .markets import check_markets, expand_markets
+from .markets import check_markets
 
 logger = logging.getLogger(__name__)
 
@@ -164,6 +164,7 @@ class StocksFinder:
     def __init__(self, config):
         
         self.config = config
+        check_markets(self.config.markets)
         self.stocks: Optional[pd.DataFrame] = None
         self.candidates: Optional[pd.DataFrame] = None
 

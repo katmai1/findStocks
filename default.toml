@@ -1,9 +1,14 @@
 [general]
+# markets disponibles: 'AMERICA', 'UK', 'INDIA', 'SPAIN', 'RUSSIA', 'AUSTRALIA', 'BRAZIL', 'JAPAN', 'NEWZEALAND', 'TURKEY', 'SWITZERLAND', 'HONGKONG', 'TAIWAN', 'NETHERLANDS', 'BELGIUM', 'PORTUGAL', 'FRANCE', 'MEXICO', 'CANADA', 'COLOMBIA', 'UAE', 'NIGERIA', 'SINGAPORE', 'GERMANY', 'PAKISTAN', 'PERU', 'POLAND', 'ITALY', 'ARGENTINA', 'ISRAEL', 'EGYPT', 'SRILANKA', 'SERBIA', 'CHILE', 'CHINA', 'MALAYSIA', 'MOROCCO', 'KSA', 'BAHRAIN', 'QATAR', 'INDONESIA', 'FINLAND', 'ICELAND', 'DENMARK', 'ROMANIA', 'HUNGARY', 'SWEDEN', 'SLOVAKIA', 'LITHUANIA', 'LUXEMBOURG', 'ESTONIA', 'LATVIA', 'VIETNAM', 'RSA', 'THAILAND', 'TUNISIA', 'KOREA', 'KENYA', 'KUWAIT', 'NORWAY', 'PHILIPPINES', 'GREECE', 'VENEZUELA', 'CYPRUS', 'BANGLADESH']
 markets = ['FRANCE', 'PORTUGAL', 'BELGIUM', 'NETHERLANDS']
+# activa el modo short y/o long
 long_enabled = true
 short_enabled = false
+# define el porcentaje de tops que se cargaran de cada mercado
 top_percent = 30
+# define el minimo de volumen (en cash), se debe aumentar por ejemplo en mercados como el japones o el americano
 volume_min = 30_000
+
 price_max = 160.0
 earning_days = 15
 stocks_max = 500
