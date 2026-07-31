@@ -4,11 +4,16 @@ Todos los valores tienen un default razonable pero pueden sobreescribirse
 por CLI (ver cli.py) o instanciando ScreenerConfig directamente.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
 class ScreenerConfig:
+    
+    markets: list[str] = field(default_factory=list)
+    long_enabled: bool = True
+    short_enabled: bool = False
+
     # nº de empresas top por capitalización a considerar, por mercado
     top_n_cap: int = 30
 

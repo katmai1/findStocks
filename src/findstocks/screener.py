@@ -161,14 +161,13 @@ def filter_candidates(df: pd.DataFrame, config: ScreenerConfig) -> pd.DataFrame:
 class StocksFinder:
     """Orquesta obtención + filtrado para uno o varios mercados."""
 
-    def __init__(self, market="EURONEXT", config: Optional[ScreenerConfig] = None):
-        self.markets = expand_markets(market)
-        check_markets(self.markets)
-        self.config = config or ScreenerConfig()
+    def __init__(self, config):
+        
+        self.config = config
         self.stocks: Optional[pd.DataFrame] = None
         self.candidates: Optional[pd.DataFrame] = None
 
     def run(self) -> pd.DataFrame:
-        self.stocks = fetch_stocks(self.markets, self.config.max_stocks)
+        self.stocks = fetch_stocks(self.config.markets, self.config.max_stocks)
         self.candidates = filter_candidates(self.stocks, self.config)
         return self.candidates

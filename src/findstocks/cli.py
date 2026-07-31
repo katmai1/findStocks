@@ -1,6 +1,11 @@
 """Interfaz de línea de comandos."""
 
+from findstocks import markets
 import argparse
+import sys
+import tomllib
+
+from pathlib import Path
 from typing import Optional, Sequence
 
 from .config import ScreenerConfig
@@ -10,60 +15,43 @@ from .screener import StocksFinder
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Script para encontrar entradas en largo en acciones")
+    parser = argparse.ArgumentParser(description="Script para encontrar entradas en acciones")
 
     parser.add_argument(
-        "-m", "--market",
-        nargs="*",
-        default=["EURONEXT"],
-        help="Mercado(s) para analizar. Ex: EURONEXT, AMERICA, GERMANY...",
+        "-c", "--config",
+        type=str,
+        default="default.toml",
+        help="Ruta al archivo de configuración"
     )
     parser.add_argument(
-        "-t", "--top",
-        type=int,
-        default=30,
-        help="Top de empresas por capitalización. Default: 30",
-    )
-    parser.add_argument(
-        "-e", "--earnings",
+        "-e", "--show-earnings",
         action="store_true",
         help="Muestra candidatos aunque haya 'earnings' cerca (desactiva ese filtro).",
-    )
-    parser.add_argument("--rsi-min", type=int, default=35, help="RSI mínimo de la zona de pullback")
-    parser.add_argument("--rsi-max", type=int, default=50, help="RSI máximo de la zona de pullback")
-    parser.add_argument("--max-price", type=float, default=180, help="Precio máximo (0 para desactivar)")
-    parser.add_argument("--min-adx", type=int, default=20, help="ADX(14) mínimo")
-    parser.add_argument(
-        "--max-distance-sma200", type=float, default=0.15,
-        help="Distancia máxima al SMA200 (proporción, ej. 0.15 = 15%%)",
-    )
-    parser.add_argument(
-        "--min-volume", type=int, default=30_000,
-        help="Volumen medio diario mínimo, en valor (no en nº de acciones)",
-    )
-    parser.add_argument(
-        "--earnings-days", type=int, default=15,
-        help="Días mínimos hasta earnings para no descartar (0 para desactivar el filtro)",
     )
     parser.add_argument("-o", "--output", help="Exporta los resultados a un archivo CSV o XLSX")
     parser.add_argument("-v", "--verbose", action="store_true", help="Muestra logs detallados (debug)")
 
     args = parser.parse_args(argv)
-    if not args.market:
-        parser.error("--market requiere al menos un valor (ej: -m EURONEXT FRANCE)")
     return args
 
 
-def build_config(args: argparse.Namespace) -> ScreenerConfig:
+def build_config(c) -> ScreenerConfig:
     return ScreenerConfig(
-        top_n_cap=args.top,
-        rsi_min=args.rsi_min,
-        rsi_max=args.rsi_max,
-        max_price=args.max_price,
-        min_adx=args.min_adx,
-        max_distance_sma200=args.max_distance_sma200,
-        min_volume=args.min_volume,
-        days_min_earnings=0 if args.earnings else args.earnings_days,
+        markets = c['general']['markets'],
+        top_n_cap = c['general']['top_percent'],
+        max_price = c['general']['price_max'],
+        min_volume = c['general']['volume_min'],
+        days_min_earnings= c['general']['earning_days'],
+        long_enabled = c['general']['long_enabled'],
+        short_enabled = c['general']['short_enabled'],
+        max_stocks = c['general']['stocks_max'],
+
+        rsi_min = c['long']['rsi_min'],
+        rsi_max = c['long']['rsi_max'],
+        min_adx = c['long']['adx_min'],
+        max_distance_sma200 = c['long']['distance_sma200_max'],
+        max_volumen_relativo = c['long']['volume_rel_max'],
+        min_performance_1y = c['long']['performance_min'],
     )
 
 
@@ -71,8 +59,19 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
     args = parse_args(argv)
     setup_logging(args.verbose)
 
-    config = build_config(args)
-    finder = StocksFinder(market=args.market, config=config)
+    config_file = Path(args.config)
+
+    try:
+        with config_file.open("rb") as f:
+            c = tomllib.load(f)
+    except FileNotFoundError:
+        sys.exit(f"Error: no existe el archivo '{config_file}'.")
+    except tomllib.TOMLDecodeError as e:
+        sys.exit(f"Error al leer '{config_file}': {e}")
+
+
+    config = build_config(c)
+    finder = StocksFinder(config=config)
     candidates = finder.run()
 
     show_candidates(candidates)

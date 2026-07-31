@@ -1,0 +1,17 @@
+[general]
+markets = ['FRANCE', 'PORTUGAL', 'BELGIUM', 'NETHERLANDS']
+long_enabled = true
+short_enabled = false
+top_percent = 30
+volume_min = 30_000
+price_max = 160.0
+earning_days = 15
+stocks_max = 500
+
+[long]
+rsi_min = 35
+rsi_max = 50
+adx_min = 15
+volume_rel_max = 1.0
+performance_min = 0.0
+distance_sma200_max = 0.15
