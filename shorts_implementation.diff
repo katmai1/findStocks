@@ -1,0 +1,343 @@
+diff --git a/default.toml b/default.toml
+index 4e88fee..9563589 100644
+--- a/default.toml
++++ b/default.toml
+@@ -20,3 +20,11 @@ adx_min = 15
+ volume_rel_max = 1.0
+ performance_min = 0.0
+ distance_sma200_max = 0.15
++
++[short]
++rsi_min = 50
++rsi_max = 65
++adx_min = 15
++volume_rel_max = 1.0
++performance_max = 0.0
++distance_sma200_max = 0.15
+diff --git a/src/findstocks/cli.py b/src/findstocks/cli.py
+index 5053295..c495f0c 100644
+--- a/src/findstocks/cli.py
++++ b/src/findstocks/cli.py
+@@ -34,6 +34,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+ 
+ 
+ def build_config(c) -> ScreenerConfig:
++    defaults = ScreenerConfig()
++    long_section = c.get('long', {})
++    short_section = c.get('short', {})
++
+     return ScreenerConfig(
+         markets = c['general']['markets'],
+         top_n_cap = c['general']['top_percent'],
+@@ -44,12 +48,19 @@ def build_config(c) -> ScreenerConfig:
+         short_enabled = c['general']['short_enabled'],
+         max_stocks = c['general']['stocks_max'],
+ 
+-        rsi_min = c['long']['rsi_min'],
+-        rsi_max = c['long']['rsi_max'],
+-        min_adx = c['long']['adx_min'],
+-        max_distance_sma200 = c['long']['distance_sma200_max'],
+-        max_volumen_relativo = c['long']['volume_rel_max'],
+-        min_performance_1y = c['long']['performance_min'],
++        rsi_min = long_section.get('rsi_min', defaults.rsi_min),
++        rsi_max = long_section.get('rsi_max', defaults.rsi_max),
++        min_adx = long_section.get('adx_min', defaults.min_adx),
++        max_distance_sma200 = long_section.get('distance_sma200_max', defaults.max_distance_sma200),
++        max_volumen_relativo = long_section.get('volume_rel_max', defaults.max_volumen_relativo),
++        min_performance_1y = long_section.get('performance_min', defaults.min_performance_1y),
++
++        rsi_min_short = short_section.get('rsi_min', defaults.rsi_min_short),
++        rsi_max_short = short_section.get('rsi_max', defaults.rsi_max_short),
++        min_adx_short = short_section.get('adx_min', defaults.min_adx_short),
++        max_distance_sma200_short = short_section.get('distance_sma200_max', defaults.max_distance_sma200_short),
++        max_volumen_relativo_short = short_section.get('volume_rel_max', defaults.max_volumen_relativo_short),
++        max_performance_1y_short = short_section.get('performance_max', defaults.max_performance_1y_short),
+     )
+ 
+ 
+diff --git a/src/findstocks/config.py b/src/findstocks/config.py
+index faf71ea..593d04c 100644
+--- a/src/findstocks/config.py
++++ b/src/findstocks/config.py
+@@ -44,3 +44,21 @@ class ScreenerConfig:
+ 
+     # descarta acciones con earnings dentro de N dias. 0 para desactivar.
+     days_min_earnings: int = 15
++
++    # --- parametros especificos de SHORT (tendencia bajista + rebote a resistencia) ---
++
++    # zona de RSI(14) considerada "rebote dentro de tendencia bajista"
++    rsi_min_short: int = 50
++    rsi_max_short: int = 65
++
++    # rendimiento maximo a 1 año (en %). Debe ser negativo para confirmar tendencia bajista.
++    max_performance_1y_short: float = 0.0
++
++    # descarta las que estan demasiado extendidas por debajo de la SMA200
++    max_distance_sma200_short: float = 0.15
++
++    # descarta las que redujeron mucho su volumen durante el rebote
++    max_volumen_relativo_short: float = 1.0
++
++    # ADX(14) minimo para shorts
++    min_adx_short: int = 20
+diff --git a/src/findstocks/screener.py b/src/findstocks/screener.py
+index a0bacf1..6897ed9 100644
+--- a/src/findstocks/screener.py
++++ b/src/findstocks/screener.py
+@@ -42,6 +42,7 @@ COLUMNAS_REQUERIDAS = [
+ ]
+ 
+ COLUMNAS_MOSTRAR = [
++    "Direction",
+     "ISIN",
+     "Name",
+     "Market",
+@@ -95,30 +96,23 @@ def fetch_stocks(markets: list[str], max_stocks: int) -> pd.DataFrame:
+     return df
+ 
+ 
+-def filter_candidates(df: pd.DataFrame, config: ScreenerConfig) -> pd.DataFrame:
+-    """Aplica el filtro de gran capitalización + tendencia alcista + punto
+-    de entrada. Función pura: no hace I/O, fácil de testear.
+-    """
+-    antes = len(df)
+-    df = df.dropna(subset=COLUMNAS_REQUERIDAS)
+-    logger.info(f"Descartados {antes - len(df)} por datos incompletos.")
++def _condiciones_earnings(df: pd.DataFrame, condiciones_base: pd.Series, config: ScreenerConfig, etiqueta: str) -> pd.Series:
++    """Calcula la condición de earnings y loguea cuántos candidatos descarta."""
++    if config.days_min_earnings <= 0:
++        return pd.Series(True, index=df.index)
+ 
+-    if config.max_price > 0:
+-        total = len(df)
+-        df = df[df["Price"] <= config.max_price]
+-        logger.info(f"Descartadas {total - len(df)} por tener un precio demasiado elevado.")
++    fecha_earnings = pd.to_datetime(df["Upcoming Earnings Date"], errors="coerce", utc=True)
++    dias_hasta_earnings = (fecha_earnings - pd.Timestamp.now(tz="UTC")).dt.days
++    c_earnings = dias_hasta_earnings.isna() | (dias_hasta_earnings > config.days_min_earnings)
++
++    candidates = df[condiciones_base]
++    descartados = len(candidates) - len(candidates[c_earnings.loc[candidates.index]])
++    logger.info(f"[{etiqueta}] Descartados {descartados} candidatos por tener earnings en los proximos {config.days_min_earnings} días")
++    return c_earnings
+ 
+-    # filtra top%
+-    df = df.sort_values("Market Capitalization", ascending=False)
+-    antes_top = len(df)
+-    percent = config.top_n_cap / 100
+-    tamano_mercado = df.groupby("Market")["Market"].transform("size")
+-    n_por_mercado = (tamano_mercado * percent).apply(math.ceil).clip(lower=1)
+-    rango_en_mercado = df.groupby("Market").cumcount() + 1
+-    df = df[rango_en_mercado <= n_por_mercado]
+-    logger.info(f"Filtrando el {config.top_n_cap}% de las top: {antes_top} -> {len(df)}")
+ 
+-    # conficiones
++def _condiciones_long(df: pd.DataFrame, config: ScreenerConfig) -> pd.Series:
++    """Tendencia alcista + pullback sano (RSI bajo dentro de la tendencia)."""
+     c_tendencia = df["Price"] > df["Simple Moving Average (200)"]
+     c_pendiente = df["Simple Moving Average (50)"] > df["Simple Moving Average (200)"]
+     c_performance = df["Yearly Performance"] > config.min_performance_1y
+@@ -131,6 +125,35 @@ def filter_candidates(df: pd.DataFrame, config: ScreenerConfig) -> pd.DataFrame:
+     distancia_sma200 = (df["Price"] - sma200) / sma200
+     c_distancia = distancia_sma200 <= config.max_distance_sma200
+ 
++    condiciones_base = (
++        c_tendencia
++        & c_pendiente
++        & c_performance
++        & c_rsi
++        & c_distancia
++        & c_vol_rel
++        & c_valor_negociado
++        & c_adx
++    )
++
++    c_earnings = _condiciones_earnings(df, condiciones_base, config, "LONG")
++    return condiciones_base & c_earnings
++
++
++def _condiciones_short(df: pd.DataFrame, config: ScreenerConfig) -> pd.Series:
++    """Tendencia bajista + rebote hacia resistencia (RSI alto dentro de la tendencia)."""
++    c_tendencia = df["Price"] < df["Simple Moving Average (200)"]
++    c_pendiente = df["Simple Moving Average (50)"] < df["Simple Moving Average (200)"]
++    c_performance = df["Yearly Performance"] < config.max_performance_1y_short
++    c_rsi = df["Relative Strength Index (14)"].between(config.rsi_min_short, config.rsi_max_short)
++    c_vol_rel = df["Relative Volume"] <= config.max_volumen_relativo_short
++    c_valor_negociado = df["Volume*Price"] >= config.min_volume
++    c_adx = df["Average Directional Index (14)"] > config.min_adx_short
++
++    sma200 = df["Simple Moving Average (200)"].replace(0, pd.NA)
++    # distancia por DEBAJO de la SMA200 (precio rebotando hacia la resistencia)
++    distancia_sma200 = (sma200 - df["Price"]) / sma200
++    c_distancia = distancia_sma200 <= config.max_distance_sma200_short
+ 
+     condiciones_base = (
+         c_tendencia
+@@ -143,18 +166,62 @@ def filter_candidates(df: pd.DataFrame, config: ScreenerConfig) -> pd.DataFrame:
+         & c_adx
+     )
+ 
+-    if config.days_min_earnings > 0:
+-        fecha_earnings = pd.to_datetime(df["Upcoming Earnings Date"], errors="coerce", utc=True)
+-        dias_hasta_earnings = (fecha_earnings - pd.Timestamp.now(tz="UTC")).dt.days
+-        c_earnings = dias_hasta_earnings.isna() | (dias_hasta_earnings > config.days_min_earnings)
+-        candidates = df[condiciones_base]
+-        candidates_earnings = len(candidates) - len(candidates[c_earnings.loc[candidates.index]])
+-        logger.info(f"Descartados {candidates_earnings} candidatos por tener earnings en los proximos {config.days_min_earnings} días")
+-    else:
+-        c_earnings = pd.Series(True, index=df.index)
+-
+-    condiciones = condiciones_base & c_earnings
+-    return df[condiciones].copy()
++    c_earnings = _condiciones_earnings(df, condiciones_base, config, "SHORT")
++    return condiciones_base & c_earnings
++
++
++def _preparar_universo(df: pd.DataFrame, config: ScreenerConfig) -> pd.DataFrame:
++    """Limpieza común: datos completos, precio máximo, recorte por top% de capitalización."""
++    antes = len(df)
++    df = df.dropna(subset=COLUMNAS_REQUERIDAS)
++    logger.info(f"Descartados {antes - len(df)} por datos incompletos.")
++
++    if config.max_price > 0:
++        total = len(df)
++        df = df[df["Price"] <= config.max_price]
++        logger.info(f"Descartadas {total - len(df)} por tener un precio demasiado elevado.")
++
++    # filtra top%
++    df = df.sort_values("Market Capitalization", ascending=False)
++    antes_top = len(df)
++    percent = config.top_n_cap / 100
++    tamano_mercado = df.groupby("Market")["Market"].transform("size")
++    n_por_mercado = (tamano_mercado * percent).apply(math.ceil).clip(lower=1)
++    rango_en_mercado = df.groupby("Market").cumcount() + 1
++    df = df[rango_en_mercado <= n_por_mercado]
++    logger.info(f"Filtrando el {config.top_n_cap}% de las top: {antes_top} -> {len(df)}")
++
++    return df
++
++
++def filter_candidates(df: pd.DataFrame, config: ScreenerConfig) -> pd.DataFrame:
++    """Aplica el filtro de gran capitalización + condiciones long y/o short
++    según `config.long_enabled` / `config.short_enabled`. Función pura: no
++    hace I/O, fácil de testear.
++
++    El resultado incluye una columna "Direction" ("LONG" o "SHORT") para
++    distinguir el tipo de candidato cuando ambos modos están activos.
++    """
++    df = _preparar_universo(df, config)
++
++    resultados = []
++
++    if config.long_enabled:
++        candidatos_long = df[_condiciones_long(df, config)].copy()
++        candidatos_long["Direction"] = "LONG"
++        resultados.append(candidatos_long)
++
++    if config.short_enabled:
++        candidatos_short = df[_condiciones_short(df, config)].copy()
++        candidatos_short["Direction"] = "SHORT"
++        resultados.append(candidatos_short)
++
++    if not resultados:
++        vacio = df.iloc[0:0].copy()
++        vacio["Direction"] = pd.Series(dtype="object")
++        return vacio
++
++    return pd.concat(resultados)
+ 
+ 
+ class StocksFinder:
+diff --git a/tests/test_screener.py b/tests/test_screener.py
+index e7bcdb5..c13aad6 100644
+--- a/tests/test_screener.py
++++ b/tests/test_screener.py
+@@ -133,3 +133,87 @@ def test_top_n_cap_keeps_highest_market_cap(config):
+     result = filter_candidates(df, config)
+     assert len(result) == 2
+     assert set(result["Market Capitalization"]) == {9_000_000_000, 3_000_000_000}
++
++
++# --- SHORT ---
++
++def make_row_short(**overrides):
++    """Fila base bajista que cumple TODOS los criterios de short por defecto."""
++    row = {
++        "Name": "ACME",
++        "ISIN": "FR0000000001",
++        "Exchange": "EPA",
++        "Market": "FRANCE",
++        "Price": 90.0,
++        "Market Capitalization": 5_000_000_000,
++        "Relative Strength Index (14)": 58,
++        "Average Directional Index (14)": 25,
++        "Simple Moving Average (50)": 95,
++        "Simple Moving Average (200)": 100,
++        "Yearly Performance": -10.0,
++        "Relative Volume": 0.8,
++        "Volume*Price": 100_000,
++        "Upcoming Earnings Date": FUTURE_EARNINGS,
++    }
++    row.update(overrides)
++    return row
++
++
++@pytest.fixture
++def short_config():
++    return ScreenerConfig(long_enabled=False, short_enabled=True)
++
++
++def test_valid_short_candidate_is_kept(short_config):
++    df = pd.DataFrame([make_row_short()])
++    result = filter_candidates(df, short_config)
++    assert len(result) == 1
++    assert result.iloc[0]["Direction"] == "SHORT"
++
++
++def test_short_uptrend_is_discarded(short_config):
++    # precio por encima de la SMA200 -> no hay tendencia bajista
++    df = pd.DataFrame([make_row_short(Price=110, **{"Simple Moving Average (200)": 100})])
++    result = filter_candidates(df, short_config)
++    assert result.empty
++
++
++def test_short_rsi_outside_rally_zone_is_discarded(short_config):
++    df = pd.DataFrame([make_row_short(**{"Relative Strength Index (14)": 20})])
++    result = filter_candidates(df, short_config)
++    assert result.empty
++
++
++def test_short_positive_performance_is_discarded(short_config):
++    df = pd.DataFrame([make_row_short(**{"Yearly Performance": 5.0})])
++    result = filter_candidates(df, short_config)
++    assert result.empty
++
++
++def test_short_low_adx_is_discarded(short_config):
++    df = pd.DataFrame([make_row_short(**{"Average Directional Index (14)": 5})])
++    result = filter_candidates(df, short_config)
++    assert result.empty
++
++
++def test_short_too_far_below_sma200_is_discarded(short_config):
++    short_config.max_distance_sma200_short = 0.05
++    df = pd.DataFrame([make_row_short(Price=80, **{"Simple Moving Average (200)": 100})])
++    result = filter_candidates(df, short_config)
++    assert result.empty
++
++
++def test_long_and_short_together_produce_both_directions():
++    config = ScreenerConfig(long_enabled=True, short_enabled=True, top_n_cap=100)
++    df = pd.DataFrame([make_row(), make_row_short(**{"ISIN": "FR0000000002"})])
++    result = filter_candidates(df, config)
++    assert set(result["Direction"]) == {"LONG", "SHORT"}
++    assert len(result) == 2
++
++
++def test_both_disabled_returns_empty_with_direction_column():
++    config = ScreenerConfig(long_enabled=False, short_enabled=False)
++    df = pd.DataFrame([make_row()])
++    result = filter_candidates(df, config)
++    assert result.empty
++    assert "Direction" in result.columns

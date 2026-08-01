@@ -34,6 +34,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def build_config(c) -> ScreenerConfig:
+    defaults = ScreenerConfig()
+    long_section = c.get('long', {})
+    short_section = c.get('short', {})
+
     return ScreenerConfig(
         markets = c['general']['markets'],
         top_n_cap = c['general']['top_percent'],
@@ -44,12 +48,19 @@ def build_config(c) -> ScreenerConfig:
         short_enabled = c['general']['short_enabled'],
         max_stocks = c['general']['stocks_max'],
 
-        rsi_min = c['long']['rsi_min'],
-        rsi_max = c['long']['rsi_max'],
-        min_adx = c['long']['adx_min'],
-        max_distance_sma200 = c['long']['distance_sma200_max'],
-        max_volumen_relativo = c['long']['volume_rel_max'],
-        min_performance_1y = c['long']['performance_min'],
+        rsi_min = long_section.get('rsi_min', defaults.rsi_min),
+        rsi_max = long_section.get('rsi_max', defaults.rsi_max),
+        min_adx = long_section.get('adx_min', defaults.min_adx),
+        max_distance_sma200 = long_section.get('distance_sma200_max', defaults.max_distance_sma200),
+        max_volumen_relativo = long_section.get('volume_rel_max', defaults.max_volumen_relativo),
+        min_performance_1y = long_section.get('performance_min', defaults.min_performance_1y),
+
+        rsi_min_short = short_section.get('rsi_min', defaults.rsi_min_short),
+        rsi_max_short = short_section.get('rsi_max', defaults.rsi_max_short),
+        min_adx_short = short_section.get('adx_min', defaults.min_adx_short),
+        max_distance_sma200_short = short_section.get('distance_sma200_max', defaults.max_distance_sma200_short),
+        max_volumen_relativo_short = short_section.get('volume_rel_max', defaults.max_volumen_relativo_short),
+        max_performance_1y_short = short_section.get('performance_max', defaults.max_performance_1y_short),
     )
 
 

@@ -44,3 +44,21 @@ class ScreenerConfig:
 
     # descarta acciones con earnings dentro de N dias. 0 para desactivar.
     days_min_earnings: int = 15
+
+    # --- parametros especificos de SHORT (tendencia bajista + rebote a resistencia) ---
+
+    # zona de RSI(14) considerada "rebote dentro de tendencia bajista"
+    rsi_min_short: int = 50
+    rsi_max_short: int = 65
+
+    # rendimiento maximo a 1 año (en %). Debe ser negativo para confirmar tendencia bajista.
+    max_performance_1y_short: float = 0.0
+
+    # descarta las que estan demasiado extendidas por debajo de la SMA200
+    max_distance_sma200_short: float = 0.15
+
+    # descarta las que redujeron mucho su volumen durante el rebote
+    max_volumen_relativo_short: float = 1.0
+
+    # ADX(14) minimo para shorts
+    min_adx_short: int = 20

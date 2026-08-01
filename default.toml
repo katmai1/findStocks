@@ -3,7 +3,7 @@
 markets = ['FRANCE', 'PORTUGAL', 'BELGIUM', 'NETHERLANDS']
 # activa el modo short y/o long
 long_enabled = true
-short_enabled = false
+short_enabled = true
 # define el porcentaje de tops que se cargaran de cada mercado
 top_percent = 30
 # define el minimo de volumen (en cash), se debe aumentar por ejemplo en mercados como el japones o el americano
@@ -19,4 +19,12 @@ rsi_max = 50
 adx_min = 15
 volume_rel_max = 1.0
 performance_min = 0.0
+distance_sma200_max = 0.15
+
+[short]
+rsi_min = 50
+rsi_max = 65
+adx_min = 15
+volume_rel_max = 1.0
+performance_max = 0.0
 distance_sma200_max = 0.15
