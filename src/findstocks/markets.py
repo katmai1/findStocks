@@ -1,6 +1,6 @@
 """Gestión de mercados: expansión de alias y validación contra tvscreener."""
 
-from typing import Iterable
+from collections.abc import Iterable
 
 
 def check_markets(markets: Iterable[str]) -> None:

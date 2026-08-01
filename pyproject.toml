@@ -7,7 +7,7 @@ name = "findstocks"
 version = "0.1.0"
 description = "Screener de acciones en fase de pullback dentro de una tendencia alcista"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 license = { file = "LICENSE" }
 dependencies = [
     "pandas",

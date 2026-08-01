@@ -1,19 +1,16 @@
-from findstocks.markets import EURONEXT, expand_markets
+import pytest
+
+from findstocks.markets import check_markets
 
 
-def test_expand_markets_euronext():
-    assert expand_markets("EURONEXT") == EURONEXT
+def test_check_markets_accepts_valid_markets():
+    check_markets(["FRANCE", "GERMANY"])
 
 
-def test_expand_markets_case_insensitive():
-    assert expand_markets("euronext") == EURONEXT
-    assert expand_markets(["france"]) == ["FRANCE"]
+def test_check_markets_rejects_unknown_market():
+    with pytest.raises(ValueError, match="NOEXISTE"):
+        check_markets(["NOEXISTE"])
 
 
-def test_expand_markets_deduplicates_preserving_order():
-    result = expand_markets(["EURONEXT", "FRANCE", "GERMANY"])
-    assert result == [*EURONEXT, "GERMANY"]
-
-
-def test_expand_markets_accepts_single_string():
-    assert expand_markets("america") == ["AMERICA"]
+def test_check_markets_accepts_empty_list():
+    check_markets([])

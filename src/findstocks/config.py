@@ -14,7 +14,7 @@ class ScreenerConfig:
     long_enabled: bool = True
     short_enabled: bool = False
 
-    # nº de empresas top por capitalización a considerar, por mercado
+    # % top por capitalización a considerar, por mercado (0-100)
     top_n_cap: int = 30
 
     # zona de RSI(14) considerada "pullback sano"

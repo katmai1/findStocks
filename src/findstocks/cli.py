@@ -1,12 +1,10 @@
 """Interfaz de línea de comandos."""
 
-from findstocks import markets
 import argparse
 import sys
 import tomllib
-
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Sequence
 
 from .config import ScreenerConfig
 from .logging_setup import setup_logging
@@ -14,7 +12,7 @@ from .output import export_candidates, show_candidates
 from .screener import StocksFinder
 
 
-def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Script para encontrar entradas en acciones")
 
     parser.add_argument(
@@ -55,7 +53,7 @@ def build_config(c) -> ScreenerConfig:
     )
 
 
-def main(argv: Optional[Sequence[str]] = None) -> None:
+def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
     setup_logging(args.verbose)
 
@@ -71,6 +69,9 @@ def main(argv: Optional[Sequence[str]] = None) -> None:
 
 
     config = build_config(c)
+    if args.show_earnings:
+        config.days_min_earnings = 0
+
     finder = StocksFinder(config=config)
     candidates = finder.run()
 

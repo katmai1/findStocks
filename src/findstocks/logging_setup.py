@@ -1,10 +1,9 @@
 """Configuración de logging para la app."""
 
 import logging
-from typing import Optional
 
 
-def setup_logging(verbose: bool = False, log_file: Optional[str] = None) -> None:
+def setup_logging(verbose: bool = False, log_file: str | None = None) -> None:
     nivel = logging.DEBUG if verbose else logging.INFO
     handlers = [logging.StreamHandler()]
     if log_file:

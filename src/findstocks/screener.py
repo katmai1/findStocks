@@ -5,9 +5,8 @@ red. `filter_candidates` es una función pura sobre un DataFrame y no
 depende de red, lo que la hace fácil de testear.
 """
 
-import math
 import logging
-from typing import List, Optional
+import math
 
 import pandas as pd
 
@@ -64,7 +63,7 @@ def _get_stock_fields():
     return [getattr(tvs.StockField, nombre) for nombre in CAMPOS_TV]
 
 
-def fetch_stocks(markets: List[str], max_stocks: int) -> pd.DataFrame:
+def fetch_stocks(markets: list[str], max_stocks: int) -> pd.DataFrame:
     """Descarga la lista completa de stocks para los mercados dados.
 
     Requiere red (llama a la API de TradingView vía tvscreener).
@@ -165,8 +164,8 @@ class StocksFinder:
         
         self.config = config
         check_markets(self.config.markets)
-        self.stocks: Optional[pd.DataFrame] = None
-        self.candidates: Optional[pd.DataFrame] = None
+        self.stocks: pd.DataFrame | None = None
+        self.candidates: pd.DataFrame | None = None
 
     def run(self) -> pd.DataFrame:
         self.stocks = fetch_stocks(self.config.markets, self.config.max_stocks)

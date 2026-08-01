@@ -14,6 +14,9 @@ def format_candidates(candidates: pd.DataFrame) -> pd.DataFrame:
     df = candidates[COLUMNAS_MOSTRAR].copy()
     df["Market Capitalization"] = ((df["Market Capitalization"] / 1_000_000_000).round(2).astype(str) + " B")
     df["Volume*Price"] = ((df["Volume*Price"] / 1_000_000).round(2).astype(str) + " M")
+    df["Price"] = df["Price"].round(2)
+    df["Relative Strength Index (14)"] = df["Relative Strength Index (14)"].round(1)
+    df["Relative Volume"] = df["Relative Volume"].round(2)
     return df
 
 
