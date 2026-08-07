@@ -9,7 +9,7 @@ top_percent = 30
 # define el minimo de volumen (en cash), se debe aumentar por ejemplo en mercados como el japones o el americano
 volume_min = 30_000
 
-price_max = 160.0
+price_max = 200.0
 earning_days = 15
 stocks_max = 500
 
@@ -22,9 +22,9 @@ performance_min = 0.0
 distance_sma200_max = 0.15
 
 [short]
-rsi_min = 50
+rsi_min = 55
 rsi_max = 65
 adx_min = 15
 volume_rel_max = 1.0
-performance_max = 0.0
+performance_max = -0.1
 distance_sma200_max = 0.15

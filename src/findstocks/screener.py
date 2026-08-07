@@ -103,7 +103,13 @@ def _condiciones_earnings(df: pd.DataFrame, condiciones_base: pd.Series, config:
 
     fecha_earnings = pd.to_datetime(df["Upcoming Earnings Date"], errors="coerce", utc=True)
     dias_hasta_earnings = (fecha_earnings - pd.Timestamp.now(tz="UTC")).dt.days
-    c_earnings = dias_hasta_earnings.isna() | (dias_hasta_earnings > config.days_min_earnings)
+    # Solo descartamos si el earnings esta por venir dentro de la ventana (0 <= dias <= umbral).
+    # Los earnings ya pasados (dias_hasta_earnings < 0) no deben descartar el candidato.
+    c_earnings = (
+        dias_hasta_earnings.isna()
+        | (dias_hasta_earnings < 0)
+        | (dias_hasta_earnings > config.days_min_earnings)
+    )
 
     candidates = df[condiciones_base]
     descartados = len(candidates) - len(candidates[c_earnings.loc[candidates.index]])
@@ -143,6 +149,7 @@ def _condiciones_long(df: pd.DataFrame, config: ScreenerConfig) -> pd.Series:
 def _condiciones_short(df: pd.DataFrame, config: ScreenerConfig) -> pd.Series:
     """Tendencia bajista + rebote hacia resistencia (RSI alto dentro de la tendencia)."""
     c_tendencia = df["Price"] < df["Simple Moving Average (200)"]
+    c_tendencia_corto_plazo = df["Price"] < df["Simple Moving Average (50)"]
     c_pendiente = df["Simple Moving Average (50)"] < df["Simple Moving Average (200)"]
     c_performance = df["Yearly Performance"] < config.max_performance_1y_short
     c_rsi = df["Relative Strength Index (14)"].between(config.rsi_min_short, config.rsi_max_short)
@@ -157,6 +164,7 @@ def _condiciones_short(df: pd.DataFrame, config: ScreenerConfig) -> pd.Series:
 
     condiciones_base = (
         c_tendencia
+        & c_tendencia_corto_plazo   # test: sin esto encuentra posibles longs!!??
         & c_pendiente
         & c_performance
         & c_rsi

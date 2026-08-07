@@ -6,6 +6,7 @@ from findstocks.screener import filter_candidates
 
 FUTURE_EARNINGS = (pd.Timestamp.now(tz="UTC") + pd.Timedelta(days=30)).isoformat()
 NEAR_EARNINGS = (pd.Timestamp.now(tz="UTC") + pd.Timedelta(days=2)).isoformat()
+PAST_EARNINGS = (pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=2)).isoformat()
 
 
 def make_row(**overrides):
@@ -69,6 +70,13 @@ def test_near_earnings_is_discarded_by_default(config):
 def test_earnings_filter_can_be_disabled(config):
     config.days_min_earnings = 0
     df = pd.DataFrame([make_row(**{"Upcoming Earnings Date": NEAR_EARNINGS})])
+    result = filter_candidates(df, config)
+    assert len(result) == 1
+
+
+def test_past_earnings_is_not_discarded(config):
+    # earnings ya ocurridos (fecha en el pasado) no deben descartar el candidato
+    df = pd.DataFrame([make_row(**{"Upcoming Earnings Date": PAST_EARNINGS})])
     result = filter_candidates(df, config)
     assert len(result) == 1
 
